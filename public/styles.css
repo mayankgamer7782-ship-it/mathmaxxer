@@ -1,0 +1,8 @@
+body { font-family: Arial, sans-serif; background:#f3f4f6; color:#111; margin:0; padding:20px;}
+.container { max-width:900px; margin:0 auto; }
+.topbar { display:flex; justify-content:space-between; margin-bottom:1rem; }
+#currentQ { font-size:1.4rem; background:white; padding:12px; border-radius:6px; margin-bottom:8px; }
+#questions { background:#fff; padding:12px; border-radius:6px; }
+#log { margin-top:10px; background:#fff; padding:12px; border-radius:6px; min-height:120px;}
+button { padding:8px 12px; }
+input { padding:8px; }
