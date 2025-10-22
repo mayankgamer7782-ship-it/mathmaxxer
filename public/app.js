@@ -1,3 +1,4 @@
+// Client-side logic
 const socket = io();
 
 let myId = null;
@@ -28,6 +29,7 @@ socket.on('connect', () => {
 });
 
 socket.on('presets', (presets) => {
+  // populate preset options
   presetEl.innerHTML = '';
   presets.forEach(p => {
     const opt = document.createElement('option');
@@ -80,11 +82,13 @@ function renderMatch(finished=false) {
   meInfoEl.innerHTML = `<b>${me.name}</b> — Score: ${me.score} — Time: ${me.timeLeft}s`;
   opInfoEl.innerHTML = `<b>${op.name}</b> — Score: ${op.score} — Time: ${op.timeLeft}s`;
 
+  // current question
   const q = match.questions[currentIndex] || { text: 'No more questions' };
   currentQEl.textContent = `Q${currentIndex+1}: ${q.text}`;
 
   progressEl.innerHTML = `Progress: You ${me.score} / Opponent ${op.score}`;
 
+  // log recent answers
   logEl.innerHTML = `<b>Recent answers</b><br/>`;
   for (let i=0;i<match.questions.length;i++){
     const qa = me.answers && me.answers[i];
@@ -93,13 +97,14 @@ function renderMatch(finished=false) {
   }
 
   if (finished || match.state === 'finished') {
+    // show winner
     const winner = match.winner;
     const winnerName = match.players[winner].name;
     logEl.innerHTML += `<br/><b>Match finished. Winner: ${winnerName}</b><br/>`;
+    // IQ ratings
     for (const pid in match.players) {
       const p = match.players[pid];
-      logEl.innerHTML += \
-`${p.name} — score ${p.score} — IQ ${p.iq}<br/>`;
+      logEl.innerHTML += `${p.name} — score ${p.score} — IQ ${p.iq}<br/>`;
     }
     backBtn.style.display = 'inline-block';
   } else {
@@ -116,6 +121,7 @@ function submitAnswer(){
   if (!match) return;
   const qIndex = currentIndex;
   socket.emit('submit_answer', { roomId, qIndex, answer: ans });
+  // advance to next question locally (server will validate)
   currentIndex = Math.min(currentIndex+1, match.questions.length-1);
 }
 

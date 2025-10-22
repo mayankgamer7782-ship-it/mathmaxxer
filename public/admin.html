@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>MathMaxxer Admin</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:20px;background:#f7fafc}
+    .hidden{display:none}
+  </style>
+</head>
+<body>
+  <h1>MathMaxxer — Admin</h1>
+
+  <div id="login">
+    <label>Admin password: <input id="password" type="password"/></label>
+    <button id="loginBtn">Login</button>
+    <div id="loginMsg"></div>
+  </div>
+
+  <div id="adminPanel" class="hidden">
+    <h2>Questions</h2>
+    <form id="addQ">
+      <select id="qLevel"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select>
+      <input id="qPrompt" placeholder="Prompt" size="60"/>
+      <input id="qAnswer" placeholder="Canonical answer"/>
+      <button type="submit">Add Question</button>
+    </form>
+    <div id="questionsList"></div>
+    <h2>Players</h2>
+    <div id="playersList"></div>
+  </div>
+
+  <script src="/admin.js"></script>
+</body>
+</html>

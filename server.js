@@ -1,4 +1,4 @@
-// Simple Express + Socket.IO server for MathMaxxer (math race)
+// Simple Express + Socket.IO server for Math Race game
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
@@ -14,14 +14,17 @@ const PRESETS = [
   { id: '1min5q', label: '1 min for 5 questions (blitz)', totalTimeSec: 60, questionsPerSegment: 5 }
 ];
 
+// Simple in-memory matchmaking queue
 let queue = [];
-let rooms = {};
+let rooms = {}; // roomId -> match state
 
 function makeId(prefix = '') {
   return prefix + Math.random().toString(36).slice(2, 9);
 }
 
 function generateQuestion(level) {
+  // levels: beginner, intermediate, advanced, plus ranges like "between"
+  // We'll return a question object { text, answer }
   function randint(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
   if (level === 'beginner') {
     const a = randint(1,20), b = randint(1,20);
@@ -30,20 +33,25 @@ function generateQuestion(level) {
   } else if (level === 'intermediate') {
     const a = randint(2,12), b = randint(2,12);
     if (Math.random() < 0.4) return { text: `${a} × ${b}`, answer: (a*b).toString() };
+    // a division with integer result
     const prod = a*b;
     return { text: `${prod} ÷ ${a}`, answer: b.toString() };
   } else if (level === 'advanced') {
+    // simple linear equation or fraction add
     if (Math.random() < 0.5) {
       const x = randint(1,12), m = randint(1,5), c = randint(0,10);
+      // form m*x + c = val
       const val = m*x + c;
       return { text: `Solve for x: ${m}x + ${c} = ${val}`, answer: x.toString() };
     } else {
       const a = randint(1,9), b = randint(1,9), c = randint(1,9), d = randint(1,9);
+      // Add fractions a/b + c/d = ?
       const num = a*d + c*b;
       const den = b*d;
       return { text: `${a}/${b} + ${c}/${d} (give simplified fraction or decimal)`, answer: `${num}/${den}` };
     }
   } else {
+    // fallback mixed
     return generateQuestion('intermediate');
   }
 }
@@ -64,6 +72,7 @@ io.on('connection', socket => {
     socket.emit('presets', PRESETS);
 
     if (vsBot) {
+      // create room and start match with bot
       const roomId = makeId('room_');
       const questions = makeQuestionSet(socket.player.level, 10);
       const match = {
@@ -82,6 +91,7 @@ io.on('connection', socket => {
         answers: [],
         isBot: false
       };
+      // Add bot
       const botId = makeId('bot_');
       match.players[botId] = {
         id: botId,
@@ -96,9 +106,11 @@ io.on('connection', socket => {
       rooms[roomId] = match;
       socket.join(roomId);
       socket.emit('match_start', { roomId, match });
+      // start bot behavior
       startBotForMatch(roomId, botId);
       startMatchTimers(roomId);
     } else {
+      // add to queue and try to match
       queue.push(socket);
       socket.emit('queued');
       attemptMatch();
@@ -112,22 +124,27 @@ io.on('connection', socket => {
     if (!player) return;
     const q = match.questions[qIndex];
     if (!q) return;
+    // Normalize answers: accept fraction/string or numeric eq
     const correct = normalizeAnswer(answer) === normalizeAnswer(q.answer);
     player.answers[qIndex] = { answer, correct, time: Date.now() };
     if (correct) {
       player.score = (player.score || 0) + 1;
     }
+    // update timeLeft if client sent timeLeft (we won't trust it); server keeps ticking
     io.to(roomId).emit('update', { match });
     checkMatchEnd(match);
   });
 
   socket.on('disconnect', () => {
+    // remove from queue if present
     queue = queue.filter(s => s.id !== socket.id);
+    // if in a match, mark disconnected
     for (const rid in rooms) {
       const match = rooms[rid];
       if (match.players[socket.id]) {
         match.players[socket.id].disconnected = true;
         io.to(rid).emit('update', { match });
+        // optionally end match
       }
     }
   });
@@ -136,6 +153,7 @@ io.on('connection', socket => {
 function normalizeAnswer(a) {
   if (a === undefined || a === null) return '';
   const s = String(a).trim();
+  // simplify fraction forms like "2/4" -> "1/2"
   if (s.includes('/')) {
     const parts = s.split('/').map(p => parseInt(p));
     if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[1] !== 0) {
@@ -143,6 +161,7 @@ function normalizeAnswer(a) {
       return `${parts[0]/g}/${parts[1]/g}`;
     }
   }
+  // try numeric
   const num = Number(s);
   if (!isNaN(num)) return String(num);
   return s.toLowerCase();
@@ -182,15 +201,18 @@ function startBotForMatch(roomId, botId) {
   const bot = match.players[botId];
   const players = Object.values(match.players);
   const humanId = players.find(p => !p.isBot).id;
+  // Bot will attempt to answer questions in order, with delays based on botSpeedRange and occasional mistakes
   let idx = 0;
   const botLoop = setInterval(() => {
     if (!rooms[roomId] || match.state !== 'playing') { clearInterval(botLoop); return; }
     if (idx >= match.questions.length) { clearInterval(botLoop); return; }
     if (bot.score >= 10) { clearInterval(botLoop); return; }
+    // decide to answer
     const [minS, maxS] = bot.botSpeedRangeSec;
     const delay = minS + Math.random()*(maxS-minS);
     setTimeout(() => {
       if (!rooms[roomId] || match.state !== 'playing') return;
+      // simulate possible incorrect
       const q = match.questions[idx];
       const willBeCorrect = Math.random() < bot.botAccuracy;
       const answer = willBeCorrect ? q.answer : (Number(q.answer.replace(/[^0-9-]/g,'')) || 1) + Math.round((Math.random()*5)+1);
@@ -200,12 +222,13 @@ function startBotForMatch(roomId, botId) {
       checkMatchEnd(match);
     }, delay*1000);
     idx++;
-  }, 800);
+  }, 800); // spawn attempts periodically
 }
 
 function startMatchTimers(roomId) {
   const match = rooms[roomId];
   if (!match) return;
+  // Create per-match server tick that decreases each player's timeLeft once per second
   match._timer = setInterval(() => {
     if (!rooms[roomId]) { clearInterval(match._timer); return; }
     if (match.state !== 'playing') return;
@@ -214,9 +237,12 @@ function startMatchTimers(roomId) {
       if (p.timeLeft > 0) p.timeLeft -= 1;
     }
     io.to(roomId).emit('tick', { match });
+    // check timeouts
     for (const pid in match.players) {
       const p = match.players[pid];
       if (p.timeLeft <= 0) {
+        // end match if both timed out or compare
+        // We'll call checkMatchEnd which handles termination
         checkMatchEnd(match);
       }
     }
@@ -226,14 +252,17 @@ function startMatchTimers(roomId) {
 function checkMatchEnd(match) {
   if (!match || match.state !== 'playing') return;
   const players = Object.values(match.players);
+  // immediate win if any player reaches 10
   for (const p of players) {
     if (p.score >= 10) {
       finishMatch(match, p.id);
       return;
     }
   }
+  // if all players have timeLeft <= 0 or disconnected, end and compare scores
   const allStopped = players.every(p => (p.timeLeft <= 0) || p.disconnected || p.isBot && p.score>=10);
   if (allStopped) {
+    // highest score wins; tie -> compare timeLeft
     let sorted = players.slice().sort((a,b) => {
       if (b.score !== a.score) return b.score - a.score;
       return b.timeLeft - a.timeLeft;
@@ -246,6 +275,7 @@ function finishMatch(match, winnerId) {
   if (!match || match.state !== 'playing') return;
   match.state = 'finished';
   clearInterval(match._timer);
+  // compute simple IQ ratings: base 100 + level factor + performance
   for (const pid in match.players) {
     const p = match.players[pid];
     const base = 100;
@@ -256,11 +286,12 @@ function finishMatch(match, winnerId) {
   }
   match.winner = winnerId;
   io.to(match.id).emit('match_end', { match });
+  // cleanup room after short delay
   setTimeout(() => {
     delete rooms[match.id];
   }, 60*1000);
 }
 
 http.listen(PORT, () => {
-  console.log('MathMaxxer server listening on', PORT);
+  console.log('Math-race server listening on', PORT);
 });

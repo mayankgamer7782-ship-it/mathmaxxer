@@ -1,4 +1,4 @@
-# MathMaxxer (prototype)
+# Math Race (prototype)
 
 Realtime math race: solve 10 questions before your opponent. Built with Node.js + Express + Socket.IO.
 
@@ -20,7 +20,9 @@ Notes
 - This is a minimal prototype. Questions are generated server-side and validated by the server.
 - Bot behavior is deterministic-ish with randomized delay and accuracy per difficulty level.
 
-Next steps
-- Add persistent user accounts and IQ rating stored in Postgres on Railway.
-- Add admin UI to manage question bank and view player stats.
-- Add CI and deploy pipeline for Railway.
+Potential next steps:
+- Persist user accounts and ratings.
+- ELO-like rating system replacing simple IQ formula.
+- Improve timer/clock behavior (implement alternating clocks for turn-based mechanics).
+- Add more question types, multi-step problems, and better answer normalization.
+- Add authentication, lobby UI, and matchmaking improvements.
